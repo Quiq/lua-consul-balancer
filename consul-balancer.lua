@@ -12,7 +12,7 @@ local service_warmup_period = 60
 local _M = {}
 
 
-local function sort_table_keys(arg)
+local function sorted_table_keys(arg)
     local sorted_keys = {}
     for k in pairs(arg) do
         table.insert(sorted_keys, k)
@@ -115,8 +115,12 @@ local function check_service(service, healthcheck_uri, addresses)
     -- Retrieve previous addesses before we rewrite them.
     local prev_address_list = cache:get(service)
 
-    -- Store alive addresses.
-    cache:set(service, table.concat(addresses, " "))
+    -- Store alive addresses if changed.
+    table.sort(addresses)
+    local new_address_list = table.concat(addresses, " ")
+    if prev_address_list ~= new_address_list then
+        cache:set(service, new_address_list)
+    end
 
     -- Find newly registered services and set them for throttling.
     if not prev_address_list or prev_address_list == "" then
@@ -273,7 +277,7 @@ function _M.balance(config)
     else
         -- Randomize based on weight intervals.
         local rand_bucket = math.random(total_weight)
-        for _, interval in pairs(sort_table_keys(server_buckets)) do
+        for _, interval in pairs(sorted_table_keys(server_buckets)) do
             backend = server_buckets[interval]
             if rand_bucket <= interval then
                 break
@@ -331,7 +335,7 @@ function _M.print_status(config)
     local consul_refresh_time = cache:get("consul_refresh_time")
     ngx.say("* Consul SD")
     ngx.say(string.format("  %-26s", "Last refresh time:") .. if_then_else(consul_refresh_time, os.date("%c", consul_refresh_time), "?"))
-    for _, service in pairs(sort_table_keys(config.services)) do
+    for _, service in pairs(sorted_table_keys(config.services)) do
         local addresses = describe_service(service)
         ngx.say(string.format("  %-26s", service .. ":") .. if_then_else(addresses, addresses, "?"))
     end
