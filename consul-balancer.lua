@@ -195,6 +195,11 @@ function _M.refresh(premature, config)
             elseif res then
                 local s = json.decode(res.body)
                 for _, node in pairs(s) do
+                    -- Store IP to hostname mapping to use with balancer.set_current_peer() for SNI
+                    local hostname = cache:get(node.Node.Address)
+                    if not hostname or hostname ~= node.Service.Address then
+                        cache:set(node.Node.Address, node.Service.Address)
+                    end
                     for _, check in pairs(node.Checks) do
                         if check.ServiceName == service and (any_consul_state or check.Status ~= "critical") then
                             table.insert(addresses, node.Node.Address .. ":" .. node.Service.Port)
@@ -291,7 +296,7 @@ function _M.balance(config)
     end
     local host, port = string.match(backend, "^(.+):(%d+)$")
     balancer.set_more_tries(1)
-    balancer.set_current_peer(host, port)
+    balancer.set_current_peer(host, port, cache:get(host))
 end
 
 -- Describe service for the status output
